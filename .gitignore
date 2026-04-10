@@ -1,0 +1,12 @@
+# Internal Documentation
+docs-private/
+.github/
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Experimental files
+/test.js
