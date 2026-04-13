@@ -27,4 +27,10 @@ export const actions = [
       "\nHeads down, crunch mode. Bugs squashed, but the team is worn out. Health drained and it costs cash.",
     effects: { cash: -10, health: -15, bugs: -5 },
   },
+  {
+    id: "goBack",
+    optionText: "Go Back",
+    effectText: "\nGo back",
+    effects: { cash: null, health: null, bugs: null },
+  },
 ];

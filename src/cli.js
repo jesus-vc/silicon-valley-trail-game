@@ -17,6 +17,8 @@ import {
 } from "./engine.js";
 import { fetchWeatherMap } from "./weather.js";
 
+let allSnapshots = [];
+
 const gameState = createGameState();
 const rl = readline.createInterface({ input, output });
 const start = locations[0].name;
@@ -214,7 +216,7 @@ async function playEventTurn(event) {
 }
 
 async function playTurn() {
-  console.clear();
+  // console.clear();
   displayMenu(gameState);
 
   let choice = false;
@@ -237,6 +239,18 @@ async function playTurn() {
 
   console.log(`${SEPARATOR}\nYou chose '${chosenAction.optionText}'`);
   console.log(`${SEPARATOR}\n${chosenAction.effectText}`);
+
+  // Store current gameState
+  console.log("previous GameState");
+  // const startingGameState = { ...gameState };
+  const snapshot = {
+    ...gameState,
+    resources: { ...gameState.resources },
+  };
+
+  // allSnapshots.push(1);
+  // allSnapshots.push(snapshot);
+  // console.log(snapshot);
 
   // Apply resource effects
   applyResourceEffect(gameState, chosenAction);
@@ -264,6 +278,10 @@ async function playTurn() {
       checkWinLoss(gameState, locations);
     }
   }
+  console.log("allSnapshots");
+  console.log(allSnapshots);
+  console.log("updated GameState");
+  console.log(gameState);
 
   await rl.question("\nPress Enter to continue...");
 }
@@ -273,8 +291,6 @@ async function startGame() {
 ${SEPARATOR}
 Loading Game!
 ${SEPARATOR}`;
-
-  console.log(displayLoading);
 
   try {
     weatherMap = await fetchWeatherMap(locations);
