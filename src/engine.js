@@ -24,6 +24,7 @@ function applyResourceEffect(gameState, chosenAction) {
   gameState.resources.bugs = Math.max(0, gameState.resources.bugs);
 }
 
+//TODONow - Modify logic to return a string of status rather than changing directly gameState.
 function checkWinLoss(gameState, locations) {
   if (
     gameState.resources.health <= LOSE_CONDITIONS.minHealth ||
