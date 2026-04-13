@@ -8,6 +8,7 @@ const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 // Fail fast — a good response should be under 1s; 3s avoids hanging on slow/unresponsive requests
 const TIMEOUT_MS = 3000;
 
+//TODOLater - consider retry if it makes sense for a game of this magnitude
 export async function fetchWeatherMap(locations) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
