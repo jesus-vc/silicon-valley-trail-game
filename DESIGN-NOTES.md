@@ -6,7 +6,7 @@
 
 **Static config** (`locations`, `actions`, `events`) is loaded once at startup and never mutated. **Runtime state** (`gameState`) is created fresh each session. Keeping them separate means static config has no side effects and `gameState` is the only thing that needs to be tracked or serialized.
 
-**Tradeoff:** a single mutable object means any function can accidentally overwrite any field. Acceptable at this scale — the codebase is small and all mutations are intentional and localized.
+**Tradeoff:** a single mutable module-level binding (`let gameState`) means any function can accidentally overwrite the variable. In practice all reassignments are explicit and localized to `playTurn`. `gameState` is always _replaced_ with a new object — never mutated in place — so objects stored in `snapshots` remain frozen.
 
 One deliberate distinction: the per-game event schedule (`eventMap`) is stored in `cli.js`, not in `gameState`. It is determined once at startup and never changes — not live game state that turns mutate. Mixing it into `gameState` would conflate two different categories of data.
 
@@ -30,11 +30,11 @@ Three layers, each with a stated purpose:
 | `cli.js`     | Display, input prompts, and turn orchestration                |
 | `weather.js` | API fetch + response normalization                            |
 
-`engine.js` functions (`applyResourceEffect`, `applyWeatherEffect`, `applyEventEffect`, `checkWinLoss`, `getRandomEventMap`) independently testable. `cli.js` calls them in sequence and owns display, input validation (`validateChoice`), and weather label formatting (`weatherDescription`).
+`engine.js` functions (`applyEffect`, `applyWeatherEffect`, `checkWinLoss`, `getRandomEventMap`) are independently testable. `cli.js` calls them in sequence and owns display, input validation (`validateChoice`, `promptChoice`), and weather label formatting (`weatherDescription`).
 
-`checkWinLoss` is called twice per turn: once after travel and weather effects, and again inside `playEventTurn` after the player resolves an event. This ensures a loss from an event outcome is caught immediately, not deferred.
+`checkWinLoss` is called up to three times per travel turn: after the action cost, after weather, and after the event. This ensures a loss is caught at the exact step it occurs rather than deferred to the end of the turn.
 
-**Tradeoff:** `playEventTurn` mixes readline I/O with the second `checkWinLoss` call, so that specific path is not unit-tested. The engine functions it calls are all tested individually. Migration path: extract a pure `resolveTurn(gameState, chosenAction, weather, eventOption)` if conditional branches grow.
+**Tradeoff:** `cli.js` is not unit-tested — all engine functions it calls are tested individually. The remaining code is display and turn orchestration. Migration path: extract a pure `resolveTurn(gameState, chosenAction, weather, eventOption)` if conditional branches grow.
 
 ---
 
@@ -58,7 +58,7 @@ Three layers, each with a stated purpose:
 
 Edge cases addressed throughout:
 
-- **Bugs floor clamp** — `Math.max(0, gameState.resources.bugs)` in both `applyResourceEffect` and `applyEventEffect`. Negative bugs have no meaning; the clamp prevents silent accumulation of meaningless state.
+- **Bugs floor clamp** — `Math.max(0, newResources.bugs)` in `applyEffect`. Negative bugs have no meaning; the clamp prevents silent accumulation of meaningless state.
 - **`rl.close()` on crash** — `startGame()` wraps everything in `try/finally`, guaranteeing the readline interface closes even if an unexpected error escapes.
 - **API timeout** — 3s `AbortController` prevents the game from hanging indefinitely at startup. Failing fast beats an unresponsive CLI.
 - **Rate limits** — Open-Meteo's free tier is 600 req/min. A single startup request is not a concern, and the fallback ensures the game runs regardless.
@@ -75,10 +75,10 @@ Edge cases addressed throughout:
 
 **What's covered:**
 
-- **`engine.js`** — every branch in `checkWinLoss`, `applyResourceEffect`, `applyEventEffect`, `applyWeatherEffect`, and `getRandomEventMap`, including boundary values and edge cases (e.g. bugs can't go negative, exact win/loss thresholds).
+- **`engine.js`** — every branch in `checkWinLoss`, `applyEffect`, `applyWeatherEffect`, and `getRandomEventMap`, including boundary values and edge cases (e.g. bugs can't go negative, exact win/loss thresholds).
 - **`weather.js`** — each fallback trigger: network error, timeout, bad status, unexpected shape, missing fields. Also a contract test asserting the fallback covers all active locations. More detail in [Input & Output Validation](#input--output-validation).
 - **Events contract** — every event in `regularEvents` and `apiEvents` has `description`, a non-empty `options` array, and numeric `cash`/`health`/`bugs` effects. Catches silent breakage when events are added or edited.
-- **Integration tests** — three scenarios exercise the full per-turn sequence (`applyResourceEffect` → `locationIndex++` → `applyWeatherEffect` → `checkWinLoss`): mid-journey loss, win at destination, loss at destination.
+- **Integration tests** — three scenarios exercise the full per-turn sequence (`applyEffect` → `locationIndex++` → `applyWeatherEffect` → `checkWinLoss`): mid-journey loss, win at destination, loss at destination.
 
 **What's excluded:** `cli.js` — all engine functions it calls are tested individually. The remaining code is display and turn orchestration. See the tradeoff in [Separating Responsibilities](#separating-responsibilities).
 

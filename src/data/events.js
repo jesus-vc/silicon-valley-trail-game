@@ -71,7 +71,7 @@ export const regularEvents = {
       {
         optionText: "Refuse and drive away.",
         effectText:
-          "'Startup too busy to talk.' He posts the clip to his LinkedIn. The comments are not kind. The team spends the next hour quietly stewing.",
+          "'Startup too busy to talk.' He posts the clip to his LinkedIn. The comments are not kind. The team spends the next hour quietly stewing, reducing health.",
         effects: { cash: 0, health: -10, bugs: 0 },
       },
     ],

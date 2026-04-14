@@ -28,9 +28,10 @@ export const actions = [
     effects: { cash: -10, health: -15, bugs: -5 },
   },
   {
-    id: "goBack",
-    optionText: "Go Back",
-    effectText: "\nGo back",
-    effects: { cash: null, health: null, bugs: null },
+    id: "time_travel",
+    optionText:
+      "Time travel — return to the previous location with resources restored to that point.",
+    effectText:
+      "\nYou time travel to the past! You're back at your previous location and your resources have been restored to what they were then.",
   },
 ];

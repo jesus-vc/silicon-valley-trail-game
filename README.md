@@ -71,7 +71,7 @@ No npm packages — the game runs entirely on Node.js built-ins.
 npm test
 ```
 
-Covers core engine logic (`applyResourceEffect`, `checkWinLoss`, `applyEventEffect`, `applyWeatherEffect`, `getRandomEventMap`) and all `fetchWeatherMap` failure paths (network error, timeout, bad status, non-array response, length mismatch).
+Covers core engine logic (`applyEffect`, `checkWinLoss`, `applyWeatherEffect`, `getRandomEventMap`) and all `fetchWeatherMap` failure paths (network error, timeout, bad status, non-array response, length mismatch).
 
 ## Example Gameplay
 
@@ -110,7 +110,7 @@ Your choice (1-2): 2              ← type 1 or 2, press Enter
 Press Enter to continue...        ← press Enter
 ```
 
-Each turn: choose an action (1–3), resolve weather, then resolve a random event (1–2). Repeat until you reach San Francisco or run out of resources.
+Each turn: choose an action (1–3, or 1–4 once time travel unlocks after the first location). On travel turns, weather applies first, then a random event fires (1–2). Repeat until you reach San Francisco or run out of resources.
 
 ## AI Usage
 

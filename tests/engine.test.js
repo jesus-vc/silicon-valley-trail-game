@@ -7,8 +7,7 @@ import { createGameState } from "../src/state.js";
 import { regularEvents, apiEvents } from "../src/data/events.js";
 import {
   checkWinLoss,
-  applyResourceEffect,
-  applyEventEffect,
+  applyEffect,
   applyWeatherEffect,
   getRandomEventMap,
   WIN_CONDITIONS,
@@ -92,74 +91,61 @@ test("checkWinLoss: still playing mid-journey with healthy resources", () => {
   assert.strictEqual(state.status, "playing");
 });
 
-// --- applyResourceEffect ---
+// --- applyEffect ---
 
-test("applyResourceEffect: applies resource changes from chosen action", () => {
+test("applyEffect: applies resource changes from effects object", () => {
   const state = makeState();
-  applyResourceEffect(state, {
+  const newState = applyEffect(state, {
     id: "rest",
     effects: { cash: -10, health: 20, bugs: 2 },
   });
-  assert.strictEqual(state.resources.cash, 210); // 220 - 10
-  assert.strictEqual(state.resources.health, 170); // 150 + 20
-  assert.strictEqual(state.resources.bugs, 10); // 8 + 2
+  assert.strictEqual(newState.resources.cash, 210); // 220 - 10
+  assert.strictEqual(newState.resources.health, 170); // 150 + 20
+  assert.strictEqual(newState.resources.bugs, 10); // 8 + 2
 });
 
-test("applyResourceEffect: bugs cannot go below 0", () => {
+test("applyEffect: bugs cannot go below 0", () => {
   const state = makeState({ resources: { cash: 200, health: 120, bugs: 2 } });
-  applyResourceEffect(state, {
+  const newState = applyEffect(state, {
     id: "hackathon",
     effects: { cash: -10, health: -15, bugs: -5 },
   });
-  assert.strictEqual(state.resources.bugs, 0);
+  assert.strictEqual(newState.resources.bugs, 0);
 });
 
 // --- applyWeatherEffect ---
 
 test("applyWeatherEffect: applies rain penalty when code is at rain threshold", () => {
   const state = makeState();
-  applyWeatherEffect(state, {
+  const newState = applyWeatherEffect(state, {
     code: WEATHER_THRESHOLDS.rainCode,
     temp: 15,
   });
-  assert.strictEqual(state.resources.health, 140); // 150 - 10
+  assert.strictEqual(newState.resources.health, 140); // 150 - 10
 });
 
 test("applyWeatherEffect: applies heat penalty when temp is at heat threshold", () => {
   const state = makeState();
-  applyWeatherEffect(state, { code: 0, temp: WEATHER_THRESHOLDS.heatTemp });
-  assert.strictEqual(state.resources.health, 145); // 150 - 5
+  const newState = applyWeatherEffect(state, {
+    code: 0,
+    temp: WEATHER_THRESHOLDS.heatTemp,
+  });
+  assert.strictEqual(newState.resources.health, 145); // 150 - 5
 });
 
 test("applyWeatherEffect: applies both penalties when rain and heat thresholds both met", () => {
   const state = makeState();
-  applyWeatherEffect(state, {
+  const newState = applyWeatherEffect(state, {
     code: WEATHER_THRESHOLDS.rainCode,
     temp: WEATHER_THRESHOLDS.heatTemp,
   });
-  assert.strictEqual(state.resources.health, 135); // 150 - 10 - 5
+  assert.strictEqual(newState.resources.health, 135); // 150 - 10 - 5
 });
 
 test("applyWeatherEffect: no penalty for mild clear weather", () => {
   const state = makeState();
-  applyWeatherEffect(state, { code: 0, temp: 20 });
-  assert.strictEqual(state.resources.health, 150);
-});
-
-// --- applyEventEffect ---
-
-test("applyEventEffect: applies resource changes from event option", () => {
-  const state = makeState();
-  applyEventEffect(state, { effects: { cash: -10, health: 10, bugs: 1 } });
-  assert.strictEqual(state.resources.cash, 210); // 220 - 10
-  assert.strictEqual(state.resources.health, 160); // 150 + 10
-  assert.strictEqual(state.resources.bugs, 9); // 8 + 1
-});
-
-test("applyEventEffect: bugs cannot go below 0", () => {
-  const state = makeState({ resources: { cash: 200, health: 120, bugs: 1 } });
-  applyEventEffect(state, { effects: { cash: 0, health: 0, bugs: -5 } });
-  assert.strictEqual(state.resources.bugs, 0);
+  const newState = applyWeatherEffect(state, { code: 0, temp: 20 });
+  assert.strictEqual(newState.resources.health, 150);
 });
 
 // --- getRandomEventMap ---
@@ -202,6 +188,15 @@ test("getRandomEventMap: throws when fewer than MIN_INTERMEDIATE_LOCATIONS inter
   const tooSmall = makeWeatherMap(MIN_INTERMEDIATE_LOCATIONS);
   assert.throws(() => getRandomEventMap(tooSmall), {
     message: /expected at least/,
+  });
+});
+
+test("getRandomEventMap: throws when there are not enough regular events to fill all slots", () => {
+  // MIN+4 total → MIN+2 intermediate slots, minus 2 API slots = MIN regular slots needed.
+  // regularEvents only has MIN, so one extra location tips it over.
+  const tooMany = makeWeatherMap(MIN_INTERMEDIATE_LOCATIONS + 4); // +2 start/end + 2 extra intermediates
+  assert.throws(() => getRandomEventMap(tooMany), {
+    message: /not enough regular events/,
   });
 });
 
@@ -262,43 +257,46 @@ test("events: every event has description, options array, and numeric cash/healt
 test("full turn sequence: compounding effects across action and weather trigger a mid-journey loss", () => {
   // health=56: travel alone (-10) leaves 46 > 45 (still playing), but travel + rain drops to 36 ≤ 45 → lost
   // note: once checkWinLoss sets status to "lost", the event guard (status === "playing") prevents the event from firing
-  const state = makeState({
+  let state = makeState({
     locationIndex: 0,
     resources: { cash: 220, health: 56, bugs: 0 },
   });
-  applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
-  state.locationIndex += 1; // arrival at next location (cli.js logic, simulated here)
-  applyWeatherEffect(state, { code: WEATHER_THRESHOLDS.rainCode, temp: 15 }); // rain: -10 health
-  state.status = checkWinLoss(state, locations);
+  state = applyEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
+  state = { ...state, locationIndex: state.locationIndex + 1 }; // arrival at next location (cli.js logic, simulated here)
+  state = applyWeatherEffect(state, {
+    code: WEATHER_THRESHOLDS.rainCode,
+    temp: 15,
+  }); // rain: -10 health
+  const midJourneyStatus = checkWinLoss(state, locations);
   // health: 56 - 10 - 10 = 36, which is below LOSE_CONDITIONS.minHealth (45)
-  assert.strictEqual(state.status, "lost");
+  assert.strictEqual(midJourneyStatus, "lost");
 });
 
 test("full turn sequence: traveling to the final location with sufficient resources results in a win", () => {
   // Weather is skipped at the destination (cli.js guard) — no event fires there either
-  const state = makeState({
+  let state = makeState({
     locationIndex: locations.length - 2, // second-to-last
     resources: { cash: 200, health: 80, bugs: 0 },
   });
-  applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
-  state.locationIndex += 1; // arrival at destination (cli.js logic, simulated here)
+  state = applyEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
+  state = { ...state, locationIndex: state.locationIndex + 1 }; // arrival at destination (cli.js logic, simulated here)
   // no weather applied — skipped at destination per cli.js
-  state.status = checkWinLoss(state, locations);
+  const winStatus = checkWinLoss(state, locations);
   // health: 80 - 10 = 70 >= WIN_CONDITIONS.minHealth (60), bugs: 0 < WIN_CONDITIONS.maxBugs (5)
-  assert.strictEqual(state.status, "won");
+  assert.strictEqual(winStatus, "won");
 });
 
 test("full turn sequence: player can lose at the destination if health is above the lose threshold but below the win threshold", () => {
   // Weather is skipped at the destination (cli.js guard) — loss here comes from insufficient resources, not weather
   // health 65 - 10 (travel) = 55: above LOSE_CONDITIONS.minHealth (45) so not caught early, but below WIN_CONDITIONS.minHealth (60) → lost
-  const state = makeState({
+  let state = makeState({
     locationIndex: locations.length - 2, // second-to-last
     resources: { cash: 200, health: 65, bugs: 0 },
   });
-  applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
-  state.locationIndex += 1; // arrival at destination (cli.js logic, simulated here)
+  state = applyEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
+  state = { ...state, locationIndex: state.locationIndex + 1 }; // arrival at destination (cli.js logic, simulated here)
   // no weather applied — skipped at destination per cli.js
-  state.status = checkWinLoss(state, locations);
+  const lossAtDestStatus = checkWinLoss(state, locations);
   // health: 65 - 10 = 55, above lose threshold (45) but below win threshold (60) → lost
-  assert.strictEqual(state.status, "lost");
+  assert.strictEqual(lossAtDestStatus, "lost");
 });

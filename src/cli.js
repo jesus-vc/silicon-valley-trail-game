@@ -7,8 +7,7 @@ import { actions } from "./data/actions.js";
 import { stdin as input, stdout as output } from "node:process";
 import {
   checkWinLoss,
-  applyResourceEffect,
-  applyEventEffect,
+  applyEffect,
   applyWeatherEffect,
   getRandomEventMap,
   WIN_CONDITIONS,
@@ -17,7 +16,7 @@ import {
 } from "./engine.js";
 import { fetchWeatherMap } from "./weather.js";
 
-const gameState = createGameState();
+let gameState = createGameState();
 const rl = readline.createInterface({ input, output });
 const start = locations[0].name;
 const destination = locations[locations.length - 1].name;
@@ -59,9 +58,7 @@ OBJECTIVE
   - Cash ≤ $${LOSE_CONDITIONS.minCash} OR Health ≤ ${LOSE_CONDITIONS.minHealth} 
 
 ACTIONS (Each Turn)
-  - Travel:    moves you forward, but costs cash and health.
-  - Rest:      restores health, but costs cash and introduces new bugs.
-  - Hackathon: squashes bugs, but drains health and costs cash.
+${actions.map((a) => `  - ${a.optionText}`).join("\n")}
 
 STARTING RESOURCES
   Cash:   $${gameState.resources.cash}
@@ -80,8 +77,8 @@ Let's start!!!
   console.log(intro);
 }
 
-function displayMenu(gameState) {
-  const actionLines = actions
+function displayMenu(gameState, availableActions, currentWeather) {
+  const actionLines = availableActions
     .map((action, index) => `${index + 1}. ${action.optionText}`)
     .join("\n");
 
@@ -159,7 +156,7 @@ function displayWeather(weather, locationName) {
   );
 }
 
-function displayEvent(gameState, event) {
+function displayEvent(gameState, event, currentWeather) {
   let optionLines = "";
 
   event.options.forEach((option, index) => {
@@ -189,77 +186,85 @@ function validateChoice(rawChoice, optionCount) {
   return false;
 }
 
-async function playEventTurn(event) {
-  displayEvent(gameState, event);
-
-  const optionCount = event.options.length;
+async function promptChoice(prompt, optionCount) {
   let choice = false;
-
   while (choice === false) {
-    const rawChoice = await rl.question(`Your choice (1-${optionCount}): `);
-    choice = validateChoice(rawChoice, optionCount);
-    if (choice === false) {
+    const raw = await rl.question(`${prompt} (1-${optionCount}): `);
+    choice = validateChoice(raw, optionCount);
+    if (choice === false)
       console.log(
         `Invalid choice. Enter a number between 1 and ${optionCount}.`,
       );
-    }
   }
-
-  const chosenOption = event.options[choice - 1];
-
-  console.log(`\n${chosenOption.effectText}`);
-  applyEventEffect(gameState, chosenOption);
+  return choice;
 }
 
-async function playTurn() {
+async function playTurn(snapshots) {
   console.clear();
-  displayMenu(gameState);
 
-  let choice = false;
+  // time_travel requires both a prior location (index > 0) and a snapshot to restore to
+  const availableActions =
+    gameState.locationIndex !== 0 && snapshots.length > 1
+      ? actions
+      : actions.filter((a) => a.id !== "time_travel");
 
-  while (choice === false) {
-    const rawChoice = await rl.question(
-      `What will you choose? (1-${actions.length}): `,
-    );
+  displayMenu(gameState, availableActions, currentWeather);
 
-    choice = validateChoice(rawChoice, actions.length);
-
-    if (choice === false) {
-      console.log(
-        `Invalid choice. Enter a number between 1 and ${actions.length}.`,
-      );
-    }
-  }
-
-  const chosenAction = actions[choice - 1];
+  const choice = await promptChoice(
+    "What will you choose?",
+    availableActions.length,
+  );
+  const chosenAction = availableActions[choice - 1];
 
   console.log(`${SEPARATOR}\nYou chose '${chosenAction.optionText}'`);
   console.log(`${SEPARATOR}\n${chosenAction.effectText}`);
 
-  // Apply resource effects
-  applyResourceEffect(gameState, chosenAction);
-  gameState.status = checkWinLoss(gameState, locations);
+  if (chosenAction.id === "time_travel") {
+    snapshots.pop(); // remove current location's arrival snapshot
+    gameState = snapshots[snapshots.length - 1]; // restore to previous location's arrival state
+    currentWeather = weatherMap[locations[gameState.locationIndex].id];
+    await rl.question("\nPress Enter to continue...");
+    return;
+  }
 
-  // Apply travel effects (location advancement, weather on arrival, and random event)
+  gameState = applyEffect(gameState, chosenAction);
+  gameState = { ...gameState, status: checkWinLoss(gameState, locations) };
+
+  // Apply travel effects (location advancement, weather on arrival, and event)
   if (chosenAction.id === "travel" && gameState.status === "playing") {
-    gameState.locationIndex += 1;
+    gameState = { ...gameState, locationIndex: gameState.locationIndex + 1 };
     const arrivalLocation = locations[gameState.locationIndex];
     currentWeather = weatherMap[arrivalLocation.id];
-    // TODOLater: weather should also display at the start location, but without applying a penalty
     displayWeather(currentWeather, arrivalLocation.name);
 
-    // No weather penalty at the destination — weather shouldn't decide a win/loss the player earned
+    // No weather penalty at the final destination — weather shouldn't decide a win/loss the player earned
     const arrivedAtDestination =
       gameState.locationIndex === locations.length - 1;
+
     if (!arrivedAtDestination) {
-      applyWeatherEffect(gameState, currentWeather);
+      gameState = applyWeatherEffect(gameState, currentWeather);
     }
 
-    gameState.status = checkWinLoss(gameState, locations);
+    gameState = { ...gameState, status: checkWinLoss(gameState, locations) };
 
+    // Apply event effects
     if (gameState.status === "playing") {
-      await playEventTurn(eventMap[arrivalLocation.id]);
-      gameState.status = checkWinLoss(gameState, locations);
+      // Snapshot after travel+weather but before the event — so time_travel restores
+      // to the state the player actually saw when they arrived at this location
+      const arrivalSnapshot = gameState;
+      const event = eventMap[arrivalLocation.id];
+      displayEvent(gameState, event, currentWeather);
+      const eventChoice = await promptChoice(
+        "Your choice",
+        event.options.length,
+      );
+      const chosenOption = event.options[eventChoice - 1];
+      console.log(`\n${chosenOption.effectText}`);
+      gameState = applyEffect(gameState, chosenOption);
+      gameState = { ...gameState, status: checkWinLoss(gameState, locations) };
+      snapshots.push(arrivalSnapshot);
+      await rl.question("\nPress Enter to continue...");
+      return;
     }
   }
 
@@ -276,13 +281,18 @@ ${SEPARATOR}`;
 
   try {
     weatherMap = await fetchWeatherMap(locations);
+    currentWeather = weatherMap[locations[0].id];
     eventMap = getRandomEventMap(weatherMap);
 
     displayIntro(gameState);
     await rl.question("Press Enter to start...");
 
+    // Seed with initial state as the rewind floor — ensures snapshots is never empty during play
+    const snapshots = [gameState];
     while (gameState.status === "playing") {
-      await playTurn();
+      //TODOLater Review if playTurn() should return a snapshot rather than update directly the snapshots array.
+      // Have startGame() or another wrapper manage snapshots?
+      await playTurn(snapshots);
     }
     displayEndMessage(gameState);
   } finally {
