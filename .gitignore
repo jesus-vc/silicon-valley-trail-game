@@ -1,6 +1,5 @@
 # Internal Documentation
 docs-private/
-.github/
 
 # Dependencies
 node_modules/

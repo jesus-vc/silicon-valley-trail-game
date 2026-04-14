@@ -30,7 +30,7 @@ Three layers, each with a stated purpose:
 | `cli.js`     | Display, input prompts, and turn orchestration                |
 | `weather.js` | API fetch + response normalization                            |
 
-`engine.js` functions (`applyResourceEffect`, `applyWeatherEffect`, `applyEventEffect`, `checkWinLoss`, `getRandomEventMap`) are pure and independently testable. `cli.js` calls them in sequence and owns display, input validation (`validateChoice`), and weather label formatting (`weatherDescription`).
+`engine.js` functions (`applyResourceEffect`, `applyWeatherEffect`, `applyEventEffect`, `checkWinLoss`, `getRandomEventMap`) independently testable. `cli.js` calls them in sequence and owns display, input validation (`validateChoice`), and weather label formatting (`weatherDescription`).
 
 `checkWinLoss` is called twice per turn: once after travel and weather effects, and again inside `playEventTurn` after the player resolves an event. This ensures a loss from an event outcome is caught immediately, not deferred.
 

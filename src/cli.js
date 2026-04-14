@@ -17,8 +17,6 @@ import {
 } from "./engine.js";
 import { fetchWeatherMap } from "./weather.js";
 
-let gameStateSnapshots = [];
-
 const gameState = createGameState();
 const rl = readline.createInterface({ input, output });
 const start = locations[0].name;
@@ -83,11 +81,9 @@ Let's start!!!
 }
 
 function displayMenu(gameState) {
-  let actionLines = "";
-
-  actions.forEach((action, index) => {
-    actionLines += `${index + 1}. ${action.optionText}\n`;
-  });
+  const actionLines = actions
+    .map((action, index) => `${index + 1}. ${action.optionText}`)
+    .join("\n");
 
   const weatherLine = currentWeather
     ? ` | Weather: ${weatherDescription(currentWeather.code)}, ${currentWeather.temp}°C`
@@ -216,7 +212,7 @@ async function playEventTurn(event) {
 }
 
 async function playTurn() {
-  // console.clear();
+  console.clear();
   displayMenu(gameState);
 
   let choice = false;
@@ -240,17 +236,9 @@ async function playTurn() {
   console.log(`${SEPARATOR}\nYou chose '${chosenAction.optionText}'`);
   console.log(`${SEPARATOR}\n${chosenAction.effectText}`);
 
-  const snapshot = {
-    ...gameState,
-    resources: { ...gameState.resources },
-    chosenAction,
-  };
-
-  gameStateSnapshots.push(snapshot);
-
   // Apply resource effects
   applyResourceEffect(gameState, chosenAction);
-  checkWinLoss(gameState, locations);
+  gameState.status = checkWinLoss(gameState, locations);
 
   // Apply travel effects (location advancement, weather on arrival, and random event)
   if (chosenAction.id === "travel" && gameState.status === "playing") {
@@ -267,19 +255,13 @@ async function playTurn() {
       applyWeatherEffect(gameState, currentWeather);
     }
 
-    checkWinLoss(gameState, locations);
+    gameState.status = checkWinLoss(gameState, locations);
 
     if (gameState.status === "playing") {
       await playEventTurn(eventMap[arrivalLocation.id]);
-      checkWinLoss(gameState, locations);
+      gameState.status = checkWinLoss(gameState, locations);
     }
   }
-  console.log("allSnapshots");
-  console.log(gameStateSnapshots);
-  console.log("updated GameState");
-  console.log(gameState);
-
-  //HERE - add event decisions.
 
   await rl.question("\nPress Enter to continue...");
 }
@@ -289,6 +271,8 @@ async function startGame() {
 ${SEPARATOR}
 Loading Game!
 ${SEPARATOR}`;
+
+  console.log(displayLoading);
 
   try {
     weatherMap = await fetchWeatherMap(locations);
