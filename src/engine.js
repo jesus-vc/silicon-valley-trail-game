@@ -24,24 +24,23 @@ function applyResourceEffect(gameState, chosenAction) {
   gameState.resources.bugs = Math.max(0, gameState.resources.bugs);
 }
 
-//TODONow - Modify logic to return a string of status rather than changing directly gameState.
 function checkWinLoss(gameState, locations) {
-  if (
+  const hasDepletedResources =
     gameState.resources.health <= LOSE_CONDITIONS.minHealth ||
-    gameState.resources.cash <= LOSE_CONDITIONS.minCash
-  ) {
-    gameState.status = "lost";
-    return;
-  }
+    gameState.resources.cash <= LOSE_CONDITIONS.minCash;
+
+  if (hasDepletedResources) return "lost";
 
   const reachedDestination = gameState.locationIndex === locations.length - 1;
+  const hasSufficientResources =
+    gameState.resources.health >= WIN_CONDITIONS.minHealth &&
+    gameState.resources.bugs < WIN_CONDITIONS.maxBugs;
+
   if (reachedDestination) {
-    gameState.status =
-      gameState.resources.health >= WIN_CONDITIONS.minHealth &&
-      gameState.resources.bugs < WIN_CONDITIONS.maxBugs
-        ? "won"
-        : "lost";
+    if (hasSufficientResources) return "won";
+    return "lost";
   }
+  return "playing";
 }
 
 function applyEventEffect(gameState, chosenOption) {

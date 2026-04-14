@@ -44,7 +44,7 @@ test("checkWinLoss: won when destination reached with sufficient health and low 
       bugs: WIN_CONDITIONS.maxBugs - 1,
     },
   });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "won");
 });
 
@@ -53,7 +53,7 @@ test("checkWinLoss: lost when destination reached but health below win threshold
     locationIndex: 2,
     resources: { cash: 100, health: WIN_CONDITIONS.minHealth - 1, bugs: 0 },
   });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "lost");
 });
 
@@ -66,7 +66,7 @@ test("checkWinLoss: lost when destination reached but bugs at or above win thres
       bugs: WIN_CONDITIONS.maxBugs,
     },
   });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "lost");
 });
 
@@ -74,7 +74,7 @@ test("checkWinLoss: lost when health hits lose threshold mid-journey", () => {
   const state = makeState({
     resources: { cash: 100, health: LOSE_CONDITIONS.minHealth, bugs: 0 },
   });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "lost");
 });
 
@@ -82,13 +82,13 @@ test("checkWinLoss: lost when cash hits lose threshold mid-journey", () => {
   const state = makeState({
     resources: { cash: LOSE_CONDITIONS.minCash, health: 100, bugs: 0 },
   });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "lost");
 });
 
 test("checkWinLoss: still playing mid-journey with healthy resources", () => {
   const state = makeState({ locationIndex: 1 });
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   assert.strictEqual(state.status, "playing");
 });
 
@@ -269,37 +269,36 @@ test("full turn sequence: compounding effects across action and weather trigger 
   applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
   state.locationIndex += 1; // arrival at next location (cli.js logic, simulated here)
   applyWeatherEffect(state, { code: WEATHER_THRESHOLDS.rainCode, temp: 15 }); // rain: -10 health
-  checkWinLoss(state, locations);
+  state.status = checkWinLoss(state, locations);
   // health: 56 - 10 - 10 = 36, which is below LOSE_CONDITIONS.minHealth (45)
   assert.strictEqual(state.status, "lost");
 });
 
 test("full turn sequence: traveling to the final location with sufficient resources results in a win", () => {
-  // Real cli.js sequence for last travel: action → locationIndex++ → weather → checkWinLoss
-  // No event fires at the destination — checkWinLoss always terminates the game there
+  // Weather is skipped at the destination (cli.js guard) — no event fires there either
   const state = makeState({
     locationIndex: locations.length - 2, // second-to-last
     resources: { cash: 200, health: 80, bugs: 0 },
   });
   applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
   state.locationIndex += 1; // arrival at destination (cli.js logic, simulated here)
-  applyWeatherEffect(state, { code: 0, temp: 20 }); // no penalty
-  checkWinLoss(state, locations);
+  // no weather applied — skipped at destination per cli.js
+  state.status = checkWinLoss(state, locations);
   // health: 80 - 10 = 70 >= WIN_CONDITIONS.minHealth (60), bugs: 0 < WIN_CONDITIONS.maxBugs (5)
   assert.strictEqual(state.status, "won");
 });
 
-test("full turn sequence: player can lose on the last turn if health drops below the lose threshold at the destination", () => {
-  // The lose check (health <= LOSE_CONDITIONS.minHealth) fires before the win check in checkWinLoss
-  // So arriving at the destination doesn't guarantee a win — the player can still lose there
+test("full turn sequence: player can lose at the destination if health is above the lose threshold but below the win threshold", () => {
+  // Weather is skipped at the destination (cli.js guard) — loss here comes from insufficient resources, not weather
+  // health 65 - 10 (travel) = 55: above LOSE_CONDITIONS.minHealth (45) so not caught early, but below WIN_CONDITIONS.minHealth (60) → lost
   const state = makeState({
     locationIndex: locations.length - 2, // second-to-last
-    resources: { cash: 200, health: 56, bugs: 0 },
+    resources: { cash: 200, health: 65, bugs: 0 },
   });
   applyResourceEffect(state, { effects: { cash: -10, health: -10, bugs: 0 } }); // travel
   state.locationIndex += 1; // arrival at destination (cli.js logic, simulated here)
-  applyWeatherEffect(state, { code: WEATHER_THRESHOLDS.rainCode, temp: 15 }); // rain: -10 health
-  checkWinLoss(state, locations);
-  // health: 56 - 10 - 10 = 36, below LOSE_CONDITIONS.minHealth (45) — loses even at the final location
+  // no weather applied — skipped at destination per cli.js
+  state.status = checkWinLoss(state, locations);
+  // health: 65 - 10 = 55, above lose threshold (45) but below win threshold (60) → lost
   assert.strictEqual(state.status, "lost");
 });
