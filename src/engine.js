@@ -14,14 +14,15 @@ export const WEATHER_THRESHOLDS = {
   heatPenalty: 5,
 };
 
-function applyResourceEffect(gameState, chosenAction) {
-  // First, apply resource effects
-  for (const key in chosenAction.effects) {
-    gameState.resources[key] += chosenAction.effects[key];
+function applyEffect(gameState, source) {
+  const newResources = { ...gameState.resources };
+  for (const key in source.effects) {
+    newResources[key] += source.effects[key];
   }
 
   // Bugs can't go below 0 — negative bugs have no meaning
-  gameState.resources.bugs = Math.max(0, gameState.resources.bugs);
+  newResources.bugs = Math.max(0, newResources.bugs);
+  return { ...gameState, resources: newResources };
 }
 
 function checkWinLoss(gameState, locations) {
@@ -43,22 +44,15 @@ function checkWinLoss(gameState, locations) {
   return "playing";
 }
 
-function applyEventEffect(gameState, chosenOption) {
-  for (const key in chosenOption.effects) {
-    gameState.resources[key] += chosenOption.effects[key];
-  }
-
-  // Bugs can't go below 0 — negative bugs have no meaning
-  gameState.resources.bugs = Math.max(0, gameState.resources.bugs);
-}
-
 function applyWeatherEffect(gameState, currentWeather) {
+  const newResources = { ...gameState.resources };
   if (currentWeather.code >= WEATHER_THRESHOLDS.rainCode) {
-    gameState.resources.health -= WEATHER_THRESHOLDS.rainPenalty;
+    newResources.health -= WEATHER_THRESHOLDS.rainPenalty;
   }
   if (currentWeather.temp >= WEATHER_THRESHOLDS.heatTemp) {
-    gameState.resources.health -= WEATHER_THRESHOLDS.heatPenalty;
+    newResources.health -= WEATHER_THRESHOLDS.heatPenalty;
   }
+  return { ...gameState, resources: newResources };
 }
 
 function getRandomIndex(length) {
@@ -104,8 +98,15 @@ function getRandomEventMap(weatherMap) {
   eventMap[fogLocationId] =
     apiEvents[usesFoggy ? "foggy_event" : "no_foggy_event"];
 
-  // Step 3: Fill remaining slots (eligibleIds minus the 2 API event slots above) using pick-and-remove so no event repeats
+  // Step 3: Fill remaining slots (eligibleIds minus the API event slots above) using pick-and-remove so no event repeats
   const regularPool = Object.values(regularEvents);
+  const apiEventSlotCount = 2; // Steps 1 and 2 each claim one slot
+  const requiredRegularEventCount = eligibleIds.length - apiEventSlotCount;
+  if (regularPool.length < requiredRegularEventCount) {
+    throw new Error(
+      `getRandomEventMap: not enough regular events (${regularPool.length}) to fill ${requiredRegularEventCount} slots. Add events to regularEvents or reduce locations.`,
+    );
+  }
   for (const id of eligibleIds) {
     if (!eventMap[id]) {
       const i = getRandomIndex(regularPool.length);
@@ -117,10 +118,4 @@ function getRandomEventMap(weatherMap) {
   return eventMap;
 }
 
-export {
-  checkWinLoss,
-  applyResourceEffect,
-  applyEventEffect,
-  applyWeatherEffect,
-  getRandomEventMap,
-};
+export { checkWinLoss, applyEffect, applyWeatherEffect, getRandomEventMap };
